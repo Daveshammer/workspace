@@ -13,17 +13,18 @@
 
 namespace wsp {
 
+enum class WaitStrategy {
+    HighPerformance,  // High-performance mode: original busy-waiting
+    Balanced,         // Balanced mode: adaptive waiting, sleep 1ms after exceeding max spin count
+    Smooth            // Smooth mode: sleeps 1ms per loop or uses condition variables to control the loop
+};
+
 namespace details {
 
 class workbranch {
     using worker = autothread<detach>;
     using worker_map = std::map<worker::id, worker>;
 
-    enum class WaitStrategy {
-        HighPerformance,  // High-performance mode: original busy-waiting
-        Balanced,         // Balanced mode: adaptive waiting, sleep 1ms after exceeding max spin count
-        Smooth  // Smooth mode: sleeps 1ms per loop or uses condition variables to control the loop
-    };
     const int max_spin_count = 1000;
     int spin_count = 0;
     WaitStrategy wait_strategy = {};
@@ -240,6 +241,8 @@ private:
     // thread's default loop
     void mission() {
         std::function<void()> task;
+        int spin_count = 0;
+
         while (true) {
             if (decline <= 0 && tq.try_pop(task)) {
                 task(); 
@@ -268,13 +271,11 @@ private:
                         }
                         case WaitStrategy::Balanced: {
                             if (spin_count < max_spin_count) {
-                                std::this_thread::yield();  // Adaptive waiting: spin first
                                 ++spin_count;
+                                std::this_thread::yield(); 
                             } else {
-                                // sleep 1ms after exceeding max spin count
-                                std::unique_lock<std::mutex> locker(lok);
-                                thread_cv.wait_for(locker, std::chrono::milliseconds(1));
-                                spin_count = 0;
+                                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                spin_count = tq.length() == 0 ? 0 : spin_count / 2;  
                             }
                             break;
                         }
