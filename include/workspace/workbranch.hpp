@@ -19,6 +19,15 @@ class workbranch {
     using worker = autothread<detach>;
     using worker_map = std::map<worker::id, worker>;
 
+    enum class WaitStrategy {
+        HighPerformance,  // High-performance mode: original busy-waiting
+        Balanced,         // Balanced mode: adaptive waiting, sleep 1ms after exceeding max spin count
+        Smooth  // Smooth mode: sleeps 1ms per loop or uses condition variables to control the loop
+    };
+    const int max_spin_count = 1000;
+    int spin_count = 0;
+    WaitStrategy wait_strategy = {};
+
     sz_t decline = 0; 
     sz_t task_done_workers = 0;
     bool is_waiting = false;
@@ -36,7 +45,8 @@ public:
      * @brief construct function
      * @param wks initial number of workers
      */
-    explicit workbranch(int wks = 1) {
+    explicit workbranch(int wks = 1, WaitStrategy strategy = WaitStrategy::HighPerformance) {
+        wait_strategy = strategy;
         for (int i = 0; i < std::max(wks, 1); ++i) {
             add_worker(); // worker 
         }
@@ -250,7 +260,30 @@ private:
                     task_done_cv.notify_one();
                     thread_cv.wait(locker, [this]{return !is_waiting; });  
                 } else {
-                    std::this_thread::yield(); 
+                    // choose the waiting strategy based on the mode
+                    switch (wait_strategy) {
+                        case WaitStrategy::HighPerformance: {
+                            std::this_thread::yield();  // High-performance mode: Busy-waiting
+                            break;
+                        }
+                        case WaitStrategy::Balanced: {
+                            if (spin_count < max_spin_count) {
+                                std::this_thread::yield();  // Adaptive waiting: spin first
+                                ++spin_count;
+                            } else {
+                                // sleep 1ms after exceeding max spin count
+                                std::unique_lock<std::mutex> locker(lok);
+                                thread_cv.wait_for(locker, std::chrono::milliseconds(1));
+                                spin_count = 0;
+                            }
+                            break;
+                        }
+                        case WaitStrategy::Smooth: {
+                            // Smooth mode: sleep 1ms per loop
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                            break;
+                        }
+                    }
                 }
             }
         }
