@@ -25,8 +25,7 @@ class workbranch {
     using worker = autothread<detach>;
     using worker_map = std::map<worker::id, worker>;
 
-    const int max_spin_count = 1000;
-    int spin_count = 0;
+    const int max_spin_count = 100;
     WaitStrategy wait_strategy = {};
 
     sz_t decline = 0; 

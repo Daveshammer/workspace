@@ -1,4 +1,5 @@
 #include <workspace/workspace.hpp>
+
 #include "timewait.h"
 
 int main(int argn, char** argvs) {
@@ -9,57 +10,18 @@ int main(int argn, char** argvs) {
     } else {
         fprintf(stderr, "Invalid parameter! usage: [threads + tasks]\n");
         return -1;
-    } 
-    {
-        wsp::workspace spc;
-        for (int i = 0; i < thread_nums; ++i) {
-            spc.attach(new wsp::workbranch(1, wsp::WaitStrategy::HighPerformance));
-        }
-        auto time_cost = timewait([&]{
-            auto task = []{    
-                for (int i = 0; i < 1000000; ++i) { // 调整循环次数以控制耗时
-                    volatile int x = i * i;        // 防止编译器优化掉循环
-            }};
-            for (int i = 0; i < task_nums/10; ++i) {
-                spc.submit<wsp::task::seq>(task, task, task, task, task, task, task, task, task, task);
-            }
-            spc.for_each([](wsp::workbranch& each){each.wait_tasks();});
-        });
-        std::cout<<"threads: "<<std::left<<std::setw(2)<<thread_nums<<" |  tasks: "<<task_nums<<"  |  time-cost: "<<time_cost<<" (s)"<<std::endl;
     }
-    {
-        wsp::workspace spc;
-        for (int i = 0; i < thread_nums; ++i) {
-            spc.attach(new wsp::workbranch(1, wsp::WaitStrategy::Balanced));
-        }
-        auto time_cost = timewait([&]{
-            auto task = []{    
-                for (int i = 0; i < 1000000; ++i) { // 调整循环次数以控制耗时
-                    volatile int x = i * i;        // 防止编译器优化掉循环
-            }};
-            for (int i = 0; i < task_nums/10; ++i) {
-                spc.submit<wsp::task::seq>(task, task, task, task, task, task, task, task, task, task);
-            }
-            spc.for_each([](wsp::workbranch& each){each.wait_tasks();});
-        });
-        std::cout<<"threads: "<<std::left<<std::setw(2)<<thread_nums<<" |  tasks: "<<task_nums<<"  |  time-cost: "<<time_cost<<" (s)"<<std::endl;
+    wsp::workspace spc;
+    for (int i = 0; i < thread_nums; ++i) {
+        spc.attach(new wsp::workbranch());
     }
-    {
-        wsp::workspace spc;
-        for (int i = 0; i < thread_nums; ++i) {
-            
-            spc.attach(new wsp::workbranch(1, wsp::WaitStrategy::Smooth));
+    auto time_cost = timewait([&] {
+        auto task = [] { /* empty task */ };
+        for (int i = 0; i < task_nums / 10; ++i) {
+            spc.submit<wsp::task::seq>(task, task, task, task, task, task, task, task, task, task);
         }
-        auto time_cost = timewait([&]{
-            auto task = []{    
-                for (int i = 0; i < 1000000; ++i) { // 调整循环次数以控制耗时
-                    volatile int x = i * i;        // 防止编译器优化掉循环
-            }};
-            for (int i = 0; i < task_nums/10; ++i) {
-                spc.submit<wsp::task::seq>(task, task, task, task, task, task, task, task, task, task);
-            }
-            spc.for_each([](wsp::workbranch& each){each.wait_tasks();});
-        });
-        std::cout<<"threads: "<<std::left<<std::setw(2)<<thread_nums<<" |  tasks: "<<task_nums<<"  |  time-cost: "<<time_cost<<" (s)"<<std::endl;
-    }
+        spc.for_each([](wsp::workbranch& each) { each.wait_tasks(); });
+    });
+    std::cout << "threads: " << std::left << std::setw(2) << thread_nums << " |  tasks: " << task_nums
+              << "  |  time-cost: " << time_cost << " (s)" << std::endl;
 }
