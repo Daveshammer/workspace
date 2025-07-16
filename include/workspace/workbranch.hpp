@@ -85,6 +85,7 @@ public:
             throw std::runtime_error("workspace: No worker in workbranch to delete");
         } else {
             decline++;
+            if (wait_strategy == waitstrategy::blocking) task_cv.notify_one();
         }
     }
 
@@ -110,9 +111,7 @@ public:
         thread_cv.notify_all();  // recover
 
         std::unique_lock<std::mutex> locker(lok);
-        waiting_finished.wait(locker, [this] {
-            return waiting_finished_worker >= workers.size();
-        });
+        waiting_finished.wait(locker, [this] { return waiting_finished_worker >= workers.size(); });
         waiting_finished_worker = 0;
         return res;
     }
@@ -290,9 +289,8 @@ private:
                     task_done_workers++;
                     task_done_cv.notify_one();
                     thread_cv.wait(locker, [this] { return !is_waiting; });
-                    waiting_finished_worker ++;
-                    if (waiting_finished_worker >= workers.size())
-                        waiting_finished.notify_one();
+                    waiting_finished_worker++;
+                    if (waiting_finished_worker >= workers.size()) waiting_finished.notify_one();
                 } else {
                     switch (wait_strategy) {
                         case waitstrategy::lowlatancy: {
@@ -311,7 +309,8 @@ private:
                         }
                         case waitstrategy::blocking: {
                             std::unique_lock<std::mutex> locker(lok);
-                            task_cv.wait(locker, [this] { return num_tasks() > 0 || is_waiting || destructing; });
+                            task_cv.wait(
+                                locker, [this] { return num_tasks() > 0 || is_waiting || destructing || decline > 0; });
                             break;
                         }
                     }
